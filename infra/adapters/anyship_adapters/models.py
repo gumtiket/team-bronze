@@ -31,6 +31,18 @@ class AwsEnvironment(AdapterModel):
     external_id: str = Field(min_length=16, max_length=128, pattern=r"^[\w+=,.@:/-]+$")
     region: str = Field(default="ap-northeast-2", pattern=r"^[a-z]{2}(-[a-z]+)+-[0-9]$")
 
+    # 사용자 계정 공용 기반(infra/user-account)의 출력값. 서비스가 기반을 만든 뒤 저장해 두었다가
+    # 넘겨 준다. 기반이 아직 없으면 비어 있고, 이 경우 check와 deploy는 `foundation_missing`으로 실패한다.
+    # 비밀이 아니다(주소와 비밀의 ARN뿐이며, 비밀번호 자체는 Secrets Manager에만 있다).
+    host: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
+    ssh_user: str = Field(default="deploy", pattern=r"^[a-z_][a-z0-9_-]{0,31}$")
+    ssh_port: int = Field(default=22, ge=1, le=65535)
+    # RDS 주소는 psql 접속 문자열에 들어가므로, 임의의 호스트가 끼어들지 못하게 RDS 도메인만 허용한다.
+    db_address: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,62}(\.[a-z0-9-]{1,63})*\.rds\.amazonaws\.com$")
+    db_port: int = Field(default=5432, ge=1024, le=65535)
+    db_secret_arn: str | None = Field(
+        default=None, pattern=r"^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[\w+=,.@/-]+$")
+
 
 class OnpremEnvironment(AdapterModel):
     """사용자가 한 번 준비해 둔 서버(Docker, 배포 계정, 우리 공개 키)."""
