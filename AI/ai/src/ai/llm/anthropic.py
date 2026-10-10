@@ -49,7 +49,7 @@ def response_model(value: Any) -> str:
     return value
 
 
-def safe_usage(value: Any) -> dict[str, Any]:
+def safe_usage(value: Any, iteration_models: Mapping[str, str] | None = None) -> dict[str, Any]:
     """Whitelist numeric usage, including cache fields; omit free-form SDK metadata."""
     usage = {name: token_count(field(value, name, 0)) for name in TOKEN_FIELDS}
     cache = field(value, "cache_creation")
@@ -71,7 +71,11 @@ def safe_usage(value: Any) -> dict[str, Any]:
                 {
                     **safe_usage_counts(item),
                     "type": kind,
-                    "model": response_model(field(item, "model")),
+                    # The API may omit an iteration's model; the first attempt always runs
+                    # the requested model and a fallback is the one that served the response.
+                    "model": response_model(
+                        field(item, "model") or (iteration_models or {}).get(kind)
+                    ),
                 }
             )
     return usage
@@ -261,7 +265,10 @@ class AnthropicClient(ValidatingClient):
                 or field(raw_usage, "output_tokens") is None
             ):
                 raise ValueError("missing usage")
-            usage = safe_usage(raw_usage)
+            usage = safe_usage(
+                raw_usage,
+                {"message": self.models[tier], "fallback_message": field(response, "model")},
+            )
             usage["provider"] = "anthropic"
             usage["requested_model"] = self.models[tier]
             content = field(response, "content")

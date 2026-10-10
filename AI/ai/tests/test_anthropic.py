@@ -150,6 +150,38 @@ def test_beta_default_fallback_records_all_attempts_without_inventing_refusal_co
     assert report.total.known_cost_usd == pytest.approx(0.0006)
 
 
+def test_iterations_without_a_model_are_attributed_instead_of_rejected():
+    # The API began returning usage.iterations entries with model=None (seen on the live server).
+    payload = response(model="claude-sonnet-5-5")
+    payload["usage"]["iterations"] = [
+        {"type": "message", "model": None, "input_tokens": 100, "output_tokens": 20}
+    ]
+    llm = AnthropicClient(
+        client=sdk(payload),
+        environ={**ENV, "ANTHROPIC_MODEL_ID_FAST": "claude-sonnet-5-5",
+                 "ANTHROPIC_REFUSAL_FALLBACK": "default"},
+    )
+    result = complete(llm)
+    assert result.usage["iterations"][0]["model"] == "claude-sonnet-5-5"
+    assert [call.model_id for call in llm.tracker.report().calls] == ["claude-sonnet-5-5"]
+
+
+def test_a_fallback_iteration_without_a_model_uses_the_serving_model():
+    payload = response(model="claude-sonnet-4-6")
+    payload["usage"]["iterations"] = [
+        {"type": "message", "input_tokens": 100, "output_tokens": 0},
+        {"type": "fallback_message", "model": None, "input_tokens": 100, "output_tokens": 20},
+    ]
+    llm = AnthropicClient(
+        client=sdk(payload),
+        environ={**ENV, "ANTHROPIC_MODEL_ID_FAST": "claude-sonnet-5-5",
+                 "ANTHROPIC_REFUSAL_FALLBACK": "default"},
+    )
+    complete(llm)
+    assert [call.model_id for call in llm.tracker.report().calls] == [
+        "claude-sonnet-5-5", "claude-sonnet-4-6"]
+
+
 def test_haiku_never_sends_server_fallback():
     llm = AnthropicClient(client=sdk(), environ={**ENV, "ANTHROPIC_REFUSAL_FALLBACK": "default"})
     assert "fallbacks" not in llm.request_parameters("fast")
