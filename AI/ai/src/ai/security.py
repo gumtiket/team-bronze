@@ -16,6 +16,10 @@ from ai.credentials import (
 )
 from ai.detectors.repo import RepoView, aliases, qualified
 
+# Config flags such as deploy-spec `secret: true` are not secret values; masking them
+# would mark every later diff containing "true"/"false" as sensitive.
+CONFIG_SCALARS = frozenset({"true", "false", "yes", "no", "on", "off", "null", "none", "~"})
+
 
 def node_span(source: str, node: ast.AST) -> tuple[int, int]:
     """AST columns count UTF-8 bytes, including for Korean source literals."""
@@ -139,7 +143,10 @@ class SourceMasker:
                 )
                 if values or re.search(r"\w+://[^\s]+@", text):
                     self.blocked_files.add(file)
-                self._values.update(value.strip("'\" ") for value in values if value.strip("'\" "))
+                for value in values:
+                    value = value.strip("'\" ")
+                    if value and value.lower() not in CONFIG_SCALARS and not value.isdigit():
+                        self._values.add(value)
 
     def source(self, repo: RepoView, file: str) -> str:
         text = repo.read(file)

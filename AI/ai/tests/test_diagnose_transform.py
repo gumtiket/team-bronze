@@ -216,6 +216,18 @@ def test_masking_multiline_unicode_defaults_and_dict_literals(tmp_path):
     assert '"API_KEY"' in output
 
 
+def test_config_flags_under_secret_keys_are_not_sensitive_values(tmp_path):
+    # An already merged AnyShip deploy-spec marks env entries with `secret: true/false`.
+    (tmp_path / "deploy-spec.yaml").write_text(
+        "env:\n  - name: APP_NAME\n    secret: false\n  - name: DATABASE_URL\n    secret: true\n"
+        "token_ttl: 3600\n"
+    )
+    (tmp_path / "config.yaml").write_text("password: dummy-test-password-not-real\n")
+    masker = SourceMasker(RepoView(tmp_path))
+    assert not masker.contains_sensitive("websocket: false\nsecret: true\nmax: 3600\n")
+    assert masker.contains_sensitive("dummy-test-password-not-real")
+
+
 def test_package_index_credential_uri_is_not_copied_into_diff(tmp_path):
     shutil.copytree(SAMPLES / "todo", tmp_path / "repo")
     requirements = tmp_path / "repo/requirements.txt"
